@@ -1,0 +1,26 @@
+{
+  "name": "smart-dine-restaurant-system",
+  "version": "1.0.0",
+  "description": "Smart Dine Restaurant System - Complete Dynamic Web Application",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "seed": "node backend/seed.js",
+    "build": "cd frontend && npm run build",
+    "dev:backend": "node backend/server.js",
+    "dev:frontend": "cd frontend && npm run dev"
+  },
+  "keywords": [
+    "smart-dine",
+    "restaurant",
+    "chatbot",
+    "upvas",
+    "jain",
+    "healthy",
+    "express",
+    "react",
+    "sqlite"
+  ],
+  "author": "",
+  "license": "ISC"
+}
