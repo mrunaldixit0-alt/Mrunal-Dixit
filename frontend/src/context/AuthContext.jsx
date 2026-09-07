@@ -52,16 +52,23 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       const response = await axios.post('/api/auth/register', { name, email, password, phone });
-      const { user: userData, token: userToken } = response.data;
-      setUser(userData);
-      setToken(userToken);
-      setLoading(false);
-      return { success: true, user: userData };
-    } catch (err) {
+      const { user: userData, token: userToken, message } = response.data;
       setLoading(false);
       return {
+        success: true,
+        message: message || 'Account created successfully!',
+        user: userData,
+        token: userToken
+      };
+    } catch (err) {
+      setLoading(false);
+      let errorMessage = 'Unable to create account. Please try again.';
+      if (err.response?.data?.error) {
+        errorMessage = err.response.data.error;
+      }
+      return {
         success: false,
-        error: err.response?.data?.error || 'Registration failed. Please try again.'
+        error: errorMessage
       };
     }
   };

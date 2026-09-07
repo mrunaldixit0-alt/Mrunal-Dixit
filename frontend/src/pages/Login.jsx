@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { User, Lock, Eye, EyeOff, ArrowRight, KeyRound, Utensils } from 'lucide-react';
+import { User, Lock, Eye, EyeOff, ArrowRight, KeyRound, Utensils, CheckCircle } from 'lucide-react';
 
 export default function Login() {
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [successBanner, setSuccessBanner] = useState('');
   const [forgotModal, setForgotModal] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -16,12 +18,15 @@ export default function Login() {
   const { login, loading } = useAuth();
   const navigate = useNavigate();
 
-  // Reset email and password fields on mount
+  // Handle passed location state from registration
   useEffect(() => {
-    setEmail('');
-    setPassword('');
-    setError('');
-  }, []);
+    if (location.state?.registeredEmail) {
+      setEmail(location.state.registeredEmail);
+    }
+    if (location.state?.successMessage) {
+      setSuccessBanner(location.state.successMessage);
+    }
+  }, [location]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -73,6 +78,13 @@ export default function Login() {
             Sign in to access your account or manage restaurant details.
           </p>
         </div>
+
+        {successBanner && (
+          <div className="p-3.5 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-semibold text-center border border-emerald-200 flex items-center justify-center space-x-2 shadow-sm">
+            <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{successBanner}</span>
+          </div>
+        )}
 
         {error && (
           <div className="p-3 rounded-xl bg-rose-50 text-rose-600 text-xs font-semibold text-center border border-rose-200">

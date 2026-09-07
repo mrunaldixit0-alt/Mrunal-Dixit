@@ -10,24 +10,50 @@ router.post('/register', async (req, res) => {
   try {
     const { name, email, password, phone } = req.body;
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: 'Name, email, and password are required.' });
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Full name is required.' });
     }
 
-    const existingUser = await dbGet('SELECT * FROM users WHERE email = ?', [email.toLowerCase().trim()]);
+    if (!email || !email.trim()) {
+      return res.status(400).json({ error: 'Email address is required.' });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+
+    if (!phone || !phone.trim()) {
+      return res.status(400).json({ error: 'Phone number is required.' });
+    }
+
+    if (!password) {
+      return res.status(400).json({ error: 'Password is required.' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const existingUser = await dbGet('SELECT * FROM users WHERE email = ?', [cleanEmail]);
     if (existingUser) {
-      return res.status(400).json({ error: 'An account with this email already exists.' });
+      return res.status(400).json({ error: 'An account with this email already exists. Please log in.' });
     }
 
     const password_hash = await bcrypt.hash(password, 10);
     const result = await dbRun(
       'INSERT INTO users (name, email, password_hash, phone, role) VALUES (?, ?, ?, ?, ?)',
-      [name.trim(), email.toLowerCase().trim(), password_hash, phone || '', 'customer']
+      [name.trim(), cleanEmail, password_hash, phone.trim(), 'customer']
     );
 
     const newUser = await dbGet('SELECT id, name, email, phone, role, created_at FROM users WHERE id = ?', [result.id]);
-    const { setDocument } = require('../firebase');
-    setDocument('users', newUser.id, newUser);
+    try {
+      const { setDocument } = require('../firebase');
+      setDocument('users', newUser.id, newUser);
+    } catch (fsErr) {
+      console.warn('Firebase Firestore sync warning during register:', fsErr.message);
+    }
 
     const token = jwt.sign(
       { id: newUser.id, email: newUser.email, role: newUser.role, name: newUser.name },
@@ -36,13 +62,13 @@ router.post('/register', async (req, res) => {
     );
 
     res.status(201).json({
-      message: 'Registration successful!',
+      message: 'Account created successfully!',
       user: newUser,
       token
     });
   } catch (err) {
     console.error('Register error:', err);
-    res.status(500).json({ error: 'Server error during registration.' });
+    res.status(500).json({ error: 'Server error during registration. Please try again later.' });
   }
 });
 
