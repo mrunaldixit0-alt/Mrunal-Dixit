@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useRestaurant } from '../../context/RestaurantContext';
 import { Settings as SettingsIcon, Save, CheckCircle } from 'lucide-react';
 
 export default function Settings() {
+  const { refreshRestaurantInfo } = useRestaurant();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [address, setAddress] = useState('');
@@ -50,6 +52,7 @@ export default function Settings() {
         email,
         opening_hours: openingHours
       });
+      await refreshRestaurantInfo();
       setMsg('Restaurant details updated successfully! Changes reflected live across customer website.');
     } catch (err) {
       console.error('Failed to save settings:', err);

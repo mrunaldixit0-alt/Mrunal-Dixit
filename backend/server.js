@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const dotenv = require('dotenv');
 
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 const { initDatabase } = require('./db');
 const seedData = require('./seed');
@@ -17,6 +17,8 @@ const ordersRoutes = require('./routes/orders');
 const restaurantRoutes = require('./routes/restaurant');
 const usersRoutes = require('./routes/users');
 const chatbotRoutes = require('./routes/chatbot');
+const bookingsRoutes = require('./routes/bookings');
+const reportsRoutes = require('./routes/reports');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -41,6 +43,8 @@ app.use('/api/orders', ordersRoutes);
 app.use('/api/restaurant', restaurantRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/chatbot', chatbotRoutes);
+app.use('/api/bookings', bookingsRoutes);
+app.use('/api/reports', reportsRoutes);
 
 // Base route test
 app.get('/api/health', (req, res) => {

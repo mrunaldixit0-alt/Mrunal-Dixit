@@ -3,14 +3,16 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function ProtectedRoute({ children, requireAdmin = false }) {
-  const { isAuthenticated, user } = useAuth();
+  const { user } = useAuth();
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+  // Customer pages are open to everyone - never block with login redirect
+  if (!requireAdmin) {
+    return children;
   }
 
-  if (requireAdmin && user?.role !== 'admin') {
-    return <Navigate to="/" replace />;
+  // Admin pages require verified admin role
+  if (!user || user.role !== 'admin') {
+    return <Navigate to="/admin/login" replace />;
   }
 
   return children;

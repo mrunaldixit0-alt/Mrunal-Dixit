@@ -1,8 +1,11 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useRestaurant } from '../context/RestaurantContext';
 import { Utensils, MapPin, Phone, Mail, Clock, Heart, Shield } from 'lucide-react';
 
 export default function Footer() {
+  const { restaurantInfo } = useRestaurant();
+
   return (
     <footer className="bg-slate-950 text-slate-400 border-t border-slate-900 pt-16 pb-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -15,11 +18,12 @@ export default function Footer() {
                 <Utensils className="w-6 h-6 stroke-[2.5]" />
               </div>
               <span className="font-bold text-lg text-white tracking-tight">
-                SMART DINE
+                {restaurantInfo?.name || 'SMART DINE'}
               </span>
             </div>
             <p className="text-sm text-slate-400 leading-relaxed">
-              Experience dynamic fine dining with our intelligent requirement-based food recommendation system. Pure ingredients, authentic taste, and instant ordering.
+              {restaurantInfo?.description ||
+                'Experience dynamic fine dining with our intelligent requirement-based food recommendation system. Pure ingredients, authentic taste, and instant ordering.'}
             </p>
             <div className="pt-2 flex items-center space-x-2 text-amber-400 text-xs font-semibold">
               <Shield className="w-4 h-4" />
@@ -36,8 +40,8 @@ export default function Footer() {
               <div className="flex items-center space-x-3 text-slate-300">
                 <Clock className="w-4 h-4 text-amber-400 shrink-0" />
                 <div>
-                  <p className="font-medium text-white">Monday - Sunday</p>
-                  <p className="text-xs text-slate-400">08:00 AM - 11:00 PM</p>
+                  <p className="font-medium text-white">Opening Schedule</p>
+                  <p className="text-xs text-slate-400">{restaurantInfo?.opening_hours || 'Mon - Sun: 08:00 AM - 11:00 PM'}</p>
                 </div>
               </div>
               <div className="pt-2 border-t border-slate-800 text-xs text-slate-400">
@@ -54,15 +58,15 @@ export default function Footer() {
             <ul className="space-y-3 text-sm">
               <li className="flex items-start space-x-3">
                 <MapPin className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                <span>104 Gourmet Boulevard, Foodie Street, Midtown City</span>
+                <span>{restaurantInfo?.address || '104 Gourmet Boulevard, Foodie Street, Midtown City'}</span>
               </li>
               <li className="flex items-center space-x-3">
                 <Phone className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>+91 98765 12345</span>
+                <span>{restaurantInfo?.phone || '+91 98765 12345'}</span>
               </li>
               <li className="flex items-center space-x-3">
                 <Mail className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>contact@smartdine.com</span>
+                <span>{restaurantInfo?.email || 'contact@smartdine.com'}</span>
               </li>
             </ul>
           </div>
@@ -81,6 +85,11 @@ export default function Footer() {
               <li>
                 <Link to="/menu" className="hover:text-amber-400 transition-colors">
                   Dynamic Food Menu
+                </Link>
+              </li>
+              <li>
+                <Link to="/book-table" className="hover:text-amber-400 transition-colors text-amber-400 font-semibold">
+                  Reserve a Table
                 </Link>
               </li>
               <li>
@@ -107,7 +116,7 @@ export default function Footer() {
         </div>
 
         <div className="mt-12 pt-8 border-t border-slate-900 flex flex-col md:flex-row items-center justify-between text-xs text-slate-500">
-          <p>© {new Date().getFullYear()} SMART DINE RESTAURANT SYSTEM. All Rights Reserved.</p>
+          <p>© {new Date().getFullYear()} {restaurantInfo?.name || 'SMART DINE'}. All Rights Reserved.</p>
           <p className="flex items-center space-x-1 mt-2 md:mt-0">
             <span>Designed & Built with</span>
             <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />

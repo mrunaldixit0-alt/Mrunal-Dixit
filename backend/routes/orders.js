@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
+const jwt = require('jsonwebtoken');
 const { dbAll, dbGet, dbRun } = require('../db');
-const { verifyToken, isAdmin } = require('../middleware/auth');
+const { JWT_SECRET, verifyToken, isAdmin, requireCustomerAuth } = require('../middleware/auth');
 
 // Helper to attach items to orders
 const attachOrderItems = async (orders) => {
@@ -14,10 +15,10 @@ const attachOrderItems = async (orders) => {
   return result;
 };
 
-// POST place new order
-router.post('/', async (req, res) => {
+// POST place new order (Mandatory Customer Authentication)
+router.post('/', requireCustomerAuth, async (req, res) => {
   try {
-    const { items, customer_name, customer_email, delivery_address, phone, payment_method, notes, user_id } = req.body;
+    const { items, customer_name, customer_email, delivery_address, phone, payment_method, notes } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Order must contain at least one item.' });
@@ -39,7 +40,9 @@ router.post('/', async (req, res) => {
     }
 
     const order_number = 'ORD-' + Math.floor(100000 + Math.random() * 900000);
-    const userIdVal = user_id || (req.user ? req.user.id : null);
+    // Security: NEVER trust client-supplied user_id. Always bind strictly to verified authenticated user.
+    const userIdVal = req.user.id;
+    const customerEmailVal = customer_email && customer_email.trim() ? customer_email.trim() : (req.user.email || '');
 
     const orderResult = await dbRun(
       `INSERT INTO orders (order_number, user_id, customer_name, customer_email, total_amount, status, delivery_address, phone, payment_method, notes)
@@ -47,23 +50,23 @@ router.post('/', async (req, res) => {
       [
         order_number,
         userIdVal,
-        customer_name,
-        customer_email || '',
+        customer_name.trim(),
+        customerEmailVal,
         total_amount,
         'Pending',
-        delivery_address,
-        phone,
+        delivery_address.trim(),
+        phone.trim(),
         payment_method || 'Cash on Delivery',
-        notes || ''
+        notes ? notes.trim() : ''
       ]
     );
 
     const orderId = orderResult.id;
 
     for (const item of items) {
-      const food = await dbGet('SELECT name FROM foods WHERE id = ?', [item.food_id]);
-      const foodName = food ? food.name : item.food_name || 'Food Item';
-      const itemPrice = item.price || (food ? food.price : 0);
+      const food = await dbGet('SELECT name, price FROM foods WHERE id = ?', [item.food_id]);
+      const foodName = (food && food.name) ? food.name : (item.food_name || item.name || 'Food Item');
+      const itemPrice = (item.price !== undefined && item.price !== null) ? item.price : (food ? food.price : 0);
 
       await dbRun(
         `INSERT INTO order_items (order_id, food_id, food_name, quantity, price)
@@ -88,13 +91,18 @@ router.post('/', async (req, res) => {
   }
 });
 
-// GET customer's orders
-router.get('/my-orders', verifyToken, async (req, res) => {
+// GET customer's orders (Authenticated customer only)
+router.get('/my-orders', requireCustomerAuth, async (req, res) => {
   try {
-    const orders = await dbAll('SELECT * FROM orders WHERE user_id = ? ORDER BY id DESC', [req.user.id]);
+    const orders = await dbAll(
+      'SELECT * FROM orders WHERE user_id = ? ORDER BY id DESC',
+      [req.user.id]
+    );
+
     const ordersWithItems = await attachOrderItems(orders);
     res.json(ordersWithItems);
   } catch (err) {
+    console.error('Fetch customer orders error:', err);
     res.status(500).json({ error: 'Failed to fetch customer orders.' });
   }
 });
@@ -121,13 +129,19 @@ router.get('/', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// GET single order details
-router.get('/:id', async (req, res) => {
+// GET single order details (Authenticated - own order or Admin)
+router.get('/:id', verifyToken, async (req, res) => {
   try {
     const order = await dbGet('SELECT * FROM orders WHERE id = ? OR order_number = ?', [req.params.id, req.params.id]);
     if (!order) {
       return res.status(404).json({ error: 'Order not found.' });
     }
+
+    // Role check: Admin can view any order; Customer can only view their own order
+    if (req.user.role !== 'admin' && order.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied. You can only view your own orders.' });
+    }
+
     const items = await dbAll('SELECT * FROM order_items WHERE order_id = ?', [order.id]);
     res.json({ ...order, items });
   } catch (err) {

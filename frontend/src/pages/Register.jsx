@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { User, Mail, Phone, Lock, Eye, EyeOff, ArrowRight, Utensils, CheckCircle } from 'lucide-react';
 
@@ -15,6 +15,7 @@ export default function Register() {
 
   const { register, loading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Ensure fields are completely empty on component mount
   useEffect(() => {
@@ -73,15 +74,11 @@ export default function Register() {
 
     const res = await register(name.trim(), email.trim(), password, phone.trim());
     if (res.success) {
-      setSuccessMsg(res.message || 'Account created successfully!');
+      setSuccessMsg(res.message || 'Account created successfully! Redirecting...');
+      const destination = location.state?.from || '/menu';
       setTimeout(() => {
-        navigate('/login', {
-          state: {
-            successMessage: 'Account created successfully! Please log in with your credentials.',
-            registeredEmail: email.trim()
-          }
-        });
-      }, 1200);
+        navigate(destination);
+      }, 1000);
     } else {
       setError(res.error);
     }
@@ -242,7 +239,11 @@ export default function Register() {
 
         <div className="text-center text-xs text-slate-500 pt-2 border-t border-slate-100">
           Already have an account?{' '}
-          <Link to="/login" className="font-bold text-amber-600 hover:text-amber-700">
+          <Link
+            to="/login"
+            state={{ from: location.state?.from }}
+            className="font-bold text-amber-600 hover:text-amber-700"
+          >
             Log In Here
           </Link>
         </div>

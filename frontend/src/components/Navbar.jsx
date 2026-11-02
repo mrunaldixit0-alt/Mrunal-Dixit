@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { useRestaurant } from '../context/RestaurantContext';
 import {
   Utensils,
   ShoppingBag,
@@ -12,12 +13,14 @@ import {
   X,
   Sparkles,
   Clock,
-  ChevronDown
+  ChevronDown,
+  CalendarCheck
 } from 'lucide-react';
 
 export default function Navbar() {
-  const { user, logout, isAdmin, isAuthenticated } = useAuth();
+  const { user, logout, isAdmin, isAuthenticated, isGuest } = useAuth();
   const { getItemCount, toast } = useCart();
+  const { restaurantInfo } = useRestaurant();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const navigate = useNavigate();
@@ -65,7 +68,7 @@ export default function Navbar() {
               </div>
               <div className="flex flex-col">
                 <span className="font-extrabold text-xl tracking-tight bg-gradient-to-r from-amber-400 via-orange-300 to-amber-200 bg-clip-text text-transparent">
-                  SMART DINE
+                  {restaurantInfo?.name || 'SMART DINE'}
                 </span>
                 <span className="text-[10px] tracking-widest text-slate-400 font-semibold uppercase -mt-1">
                   Restaurant System
@@ -95,18 +98,27 @@ export default function Navbar() {
               >
                 Dynamic Menu
               </Link>
-              {isAuthenticated && (
-                <Link
-                  to="/orders"
-                  className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                    isActive('/orders')
-                      ? 'bg-amber-500/10 text-amber-400 font-semibold'
-                      : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-                  }`}
-                >
-                  My Orders
-                </Link>
-              )}
+              <Link
+                to="/book-table"
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center space-x-1.5 ${
+                  isActive('/book-table')
+                    ? 'bg-amber-500/10 text-amber-400 font-semibold'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                }`}
+              >
+                <CalendarCheck className="w-4 h-4 text-amber-400" />
+                <span>Book a Table</span>
+              </Link>
+              <Link
+                to="/orders"
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                  isActive('/orders')
+                    ? 'bg-amber-500/10 text-amber-400 font-semibold'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                }`}
+              >
+                My Orders
+              </Link>
             </nav>
 
             {/* Action Buttons & Profile */}
@@ -137,7 +149,7 @@ export default function Navbar() {
                 </Link>
               ) : (
                 <Link
-                  to="/admin"
+                  to="/admin/login"
                   className="flex items-center space-x-1.5 text-xs text-amber-400 hover:text-amber-300 font-semibold bg-amber-400/10 px-3 py-1.5 rounded-lg border border-amber-500/20 transition-all hover:bg-amber-400/20"
                 >
                   <ShieldCheck className="w-3.5 h-3.5" />
@@ -172,6 +184,14 @@ export default function Navbar() {
                         </span>
                       </div>
                       <Link
+                        to="/book-table?tab=my-bookings"
+                        onClick={() => setUserDropdownOpen(false)}
+                        className="flex items-center space-x-2 px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors"
+                      >
+                        <CalendarCheck className="w-4 h-4 text-amber-400" />
+                        <span>My Reservations</span>
+                      </Link>
+                      <Link
                         to="/profile"
                         onClick={() => setUserDropdownOpen(false)}
                         className="flex items-center space-x-2 px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors"
@@ -188,6 +208,18 @@ export default function Navbar() {
                       </button>
                     </div>
                   )}
+                </div>
+              ) : isGuest ? (
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-amber-400 font-semibold px-2.5 py-1 bg-amber-400/10 border border-amber-400/20 rounded-lg">
+                    Guest Diner
+                  </span>
+                  <Link
+                    to="/login"
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-500 text-slate-950 hover:bg-amber-400 shadow-sm transition-all"
+                  >
+                    Sign In
+                  </Link>
                 </div>
               ) : (
                 <div className="flex items-center space-x-2">
@@ -248,21 +280,26 @@ export default function Navbar() {
             >
               Dynamic Menu
             </Link>
-            {isAuthenticated && (
-              <Link
-                to="/orders"
-                onClick={() => setMobileMenuOpen(false)}
-                className="block px-4 py-2.5 rounded-xl text-base font-medium text-slate-200 hover:bg-slate-800"
-              >
-                My Orders
-              </Link>
-            )}
             <Link
-              to="/admin"
+              to="/book-table"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-4 py-2.5 rounded-xl text-base font-medium text-amber-400 hover:bg-slate-800"
+            >
+              Book a Table
+            </Link>
+            <Link
+              to="/orders"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-4 py-2.5 rounded-xl text-base font-medium text-slate-200 hover:bg-slate-800"
+            >
+              My Orders
+            </Link>
+            <Link
+              to={isAdmin ? '/admin' : '/admin/login'}
               onClick={() => setMobileMenuOpen(false)}
               className="block px-4 py-2.5 rounded-xl text-base font-medium text-amber-400 bg-amber-500/10 border border-amber-500/20"
             >
-              Admin Dashboard
+              {isAdmin ? 'Admin Dashboard' : 'Admin Portal'}
             </Link>
 
             <div className="pt-4 border-t border-slate-800 space-y-2">
@@ -288,6 +325,28 @@ export default function Navbar() {
                     Sign Out
                   </button>
                 </>
+              ) : isGuest ? (
+                <div className="space-y-2 pt-2">
+                  <div className="px-4 py-1.5 text-xs text-amber-400 bg-amber-400/10 rounded-xl">
+                    Browsing as <strong>Guest Diner</strong>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Link
+                      to="/login"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="text-center py-2.5 rounded-xl bg-slate-800 text-slate-200 font-medium text-sm"
+                    >
+                      Sign In
+                    </Link>
+                    <Link
+                      to="/register"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="text-center py-2.5 rounded-xl bg-amber-500 text-slate-950 font-bold text-sm"
+                    >
+                      Register
+                    </Link>
+                  </div>
+                </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2 pt-2">
                   <Link

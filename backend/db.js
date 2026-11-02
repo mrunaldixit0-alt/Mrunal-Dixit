@@ -126,6 +126,24 @@ const initDatabase = async () => {
     )
   `);
 
+  // Table bookings table
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS table_bookings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      booking_number TEXT UNIQUE NOT NULL,
+      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      customer_name TEXT NOT NULL,
+      customer_email TEXT,
+      phone TEXT NOT NULL,
+      guests INTEGER NOT NULL DEFAULT 2,
+      booking_date TEXT NOT NULL,
+      booking_time TEXT NOT NULL,
+      special_requests TEXT,
+      status TEXT CHECK(status IN ('Pending', 'Confirmed', 'Completed', 'Cancelled')) DEFAULT 'Pending',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   console.log('Database tables verified/created successfully.');
 };
 

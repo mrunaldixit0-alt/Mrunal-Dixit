@@ -10,7 +10,8 @@ import {
   XCircle,
   RotateCcw,
   Utensils,
-  Sparkles
+  Sparkles,
+  AlertCircle
 } from 'lucide-react';
 
 export default function Menu({ onViewFoodDetails }) {
@@ -19,6 +20,7 @@ export default function Menu({ onViewFoodDetails }) {
   const [categories, setCategories] = useState([]);
   const [foods, setFoods] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   // Filters State
   const [search, setSearch] = useState(searchParams.get('search') || '');
@@ -57,6 +59,7 @@ export default function Menu({ onViewFoodDetails }) {
   const fetchFoods = async () => {
     try {
       setLoading(true);
+      setError(null);
       let params = {};
       if (search.trim()) params.search = search.trim();
       if (selectedCategory !== 'all') params.category = selectedCategory;
@@ -68,6 +71,7 @@ export default function Menu({ onViewFoodDetails }) {
       setFoods(res.data || []);
     } catch (err) {
       console.error('Failed to fetch menu items:', err);
+      setError('Unable to load menu dishes. Please ensure the backend server is running and try again.');
     } finally {
       setLoading(false);
     }
@@ -237,6 +241,20 @@ export default function Menu({ onViewFoodDetails }) {
           {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
             <div key={i} className="h-80 bg-slate-200 animate-pulse rounded-3xl" />
           ))}
+        </div>
+      ) : error ? (
+        <div className="bg-rose-50 border border-rose-200 rounded-3xl p-12 text-center space-y-4">
+          <div className="w-16 h-16 rounded-full bg-rose-100 text-rose-600 mx-auto flex items-center justify-center font-bold">
+            <AlertCircle className="w-8 h-8" />
+          </div>
+          <h3 className="text-xl font-bold text-rose-900">Server Connection Error</h3>
+          <p className="text-rose-600 text-sm max-w-md mx-auto">{error}</p>
+          <button
+            onClick={() => { fetchCategories(); fetchFoods(); }}
+            className="px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs uppercase transition-all shadow-md"
+          >
+            Retry Connection
+          </button>
         </div>
       ) : foods.length === 0 ? (
         <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 space-y-4">

@@ -72,23 +72,90 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Login (Admin or Customer)
+// Helper to find user by email (case-insensitive)
+async function findUserByEmail(emailInput) {
+  if (!emailInput || typeof emailInput !== 'string') return null;
+  const cleanEmail = emailInput.toLowerCase().trim();
+
+  // Direct case-insensitive lookup
+  let user = await dbGet('SELECT * FROM users WHERE LOWER(email) = ?', [cleanEmail]);
+  if (user) return user;
+
+  // Domain variant fallback for legacy entries: @smartdin.com <-> @smartdine.com
+  let altEmail = cleanEmail;
+  if (cleanEmail.endsWith('@smartdin.com')) {
+    altEmail = cleanEmail.replace('@smartdin.com', '@smartdine.com');
+  } else if (cleanEmail.endsWith('@smartdine.com')) {
+    altEmail = cleanEmail.replace('@smartdine.com', '@smartdin.com');
+  }
+
+  if (altEmail !== cleanEmail) {
+    user = await dbGet('SELECT * FROM users WHERE LOWER(email) = ?', [altEmail]);
+    if (user) return user;
+  }
+
+  return null;
+}
+
+// Optional Guest Session Access (Browsing & Permitted Actions - No Dummy Database Accounts)
+router.post('/guest-access', async (req, res) => {
+  try {
+    const { name, phone } = req.body || {};
+    const guestName = name && name.trim() ? name.trim() : 'Guest Diner';
+    const guestPhone = phone && phone.trim() ? phone.trim() : '';
+
+    const guestPayload = {
+      id: 'guest_' + Date.now(),
+      name: guestName,
+      email: '',
+      phone: guestPhone,
+      role: 'guest',
+      isGuest: true
+    };
+
+    const token = jwt.sign(guestPayload, JWT_SECRET, { expiresIn: '7d' });
+
+    res.json({
+      message: 'Guest session initialized.',
+      user: guestPayload,
+      token
+    });
+  } catch (err) {
+    console.error('Guest session error:', err);
+    res.status(500).json({ error: 'Failed to initialize guest session.' });
+  }
+});
+
+// Customer & General User Login (Standard Email & Password Authentication)
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required.' });
+    if (!email || !email.trim()) {
+      return res.status(400).json({ error: 'Email address is required.' });
     }
 
-    const user = await dbGet('SELECT * FROM users WHERE email = ?', [email.toLowerCase().trim()]);
+    if (!password) {
+      return res.status(400).json({ error: 'Password is required.' });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const user = await findUserByEmail(cleanEmail);
+
     if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password.' });
+      return res.status(401).json({ error: 'Invalid email or password. Please check your credentials and try again.' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid email or password.' });
+      // Also test trimmed password in case of accidental whitespace
+      let secondaryMatch = false;
+      if (typeof password === 'string' && password.trim() !== password) {
+        secondaryMatch = await bcrypt.compare(password.trim(), user.password_hash);
+      }
+      if (!secondaryMatch) {
+        return res.status(401).json({ error: 'Invalid email or password. Please check your credentials and try again.' });
+      }
     }
 
     const token = jwt.sign(
@@ -97,29 +164,97 @@ router.post('/login', async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    const userProfile = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      role: user.role,
-      created_at: user.created_at
-    };
-
-    res.json({
+    return res.json({
       message: 'Login successful!',
-      user: userProfile,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        created_at: user.created_at
+      },
       token
     });
   } catch (err) {
     console.error('Login error:', err);
-    res.status(500).json({ error: 'Server error during login.' });
+    res.status(500).json({ error: 'Server error during login. Please try again later.' });
   }
 });
 
-// Get Current User Profile
-router.get('/profile', verifyToken, async (req, res) => {
+// Dedicated Administrator Login Endpoint
+router.post('/admin/login', async (req, res) => {
   try {
+    const { email, password } = req.body;
+
+    if (!email || !email.trim()) {
+      return res.status(400).json({ error: 'Administrator email is required.' });
+    }
+
+    if (!password) {
+      return res.status(400).json({ error: 'Administrator password is required.' });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const user = await findUserByEmail(cleanEmail);
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid administrator credentials.' });
+    }
+
+    if (user.role !== 'admin') {
+      return res.status(403).json({ error: 'Access denied. Administrator privileges required.' });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    if (!isMatch) {
+      let secondaryMatch = false;
+      if (typeof password === 'string' && password.trim() !== password) {
+        secondaryMatch = await bcrypt.compare(password.trim(), user.password_hash);
+      }
+      if (!secondaryMatch) {
+        return res.status(401).json({ error: 'Invalid administrator credentials.' });
+      }
+    }
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: 'admin', name: user.name },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    return res.json({
+      message: 'Administrator login successful!',
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: 'admin',
+        created_at: user.created_at
+      },
+      token
+    });
+  } catch (err) {
+    console.error('Admin login error:', err);
+    res.status(500).json({ error: 'Server error during administrator login.' });
+  }
+});
+
+// Get Current User Profile (with /me alias)
+const handleGetProfile = async (req, res) => {
+  try {
+    if (req.user.role === 'guest') {
+      return res.json({
+        id: req.user.id || 'guest',
+        name: req.user.name || 'Guest Diner',
+        email: '',
+        phone: req.user.phone || '',
+        role: 'guest',
+        isGuest: true
+      });
+    }
+
     const user = await dbGet('SELECT id, name, email, phone, role, created_at FROM users WHERE id = ?', [req.user.id]);
     if (!user) {
       return res.status(404).json({ error: 'User not found.' });
@@ -128,7 +263,10 @@ router.get('/profile', verifyToken, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch user profile.' });
   }
-});
+};
+
+router.get('/profile', verifyToken, handleGetProfile);
+router.get('/me', verifyToken, handleGetProfile);
 
 // Update Profile
 router.put('/profile', verifyToken, async (req, res) => {
@@ -144,26 +282,51 @@ router.put('/profile', verifyToken, async (req, res) => {
   }
 });
 
-// Forgot Password / Reset
-router.post('/forgot-password', async (req, res) => {
+// Forgot Password / Reset Password Endpoint
+const handleResetPassword = async (req, res) => {
   try {
-    const { email, newPassword } = req.body;
-    if (!email || !newPassword) {
-      return res.status(400).json({ error: 'Email and new password are required.' });
+    const { email, newPassword, password } = req.body;
+    const targetPassword = newPassword || password;
+
+    if (!email || !email.trim()) {
+      return res.status(400).json({ error: 'Email address is required.' });
     }
 
-    const user = await dbGet('SELECT * FROM users WHERE email = ?', [email.toLowerCase().trim()]);
+    if (!targetPassword) {
+      return res.status(400).json({ error: 'New password is required.' });
+    }
+
+    if (targetPassword.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
+    }
+
+    const user = await findUserByEmail(email.trim());
     if (!user) {
       return res.status(404).json({ error: 'No account found with this email address.' });
     }
 
-    const newHash = await bcrypt.hash(newPassword, 10);
+    const newHash = await bcrypt.hash(targetPassword, 10);
     await dbRun('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, user.id]);
 
-    res.json({ message: 'Password updated successfully. You can now log in with your new password.' });
+    try {
+      const { setDocument } = require('../firebase');
+      const updatedUser = await dbGet('SELECT id, name, email, phone, role, created_at FROM users WHERE id = ?', [user.id]);
+      setDocument('users', user.id, updatedUser);
+    } catch (fsErr) {
+      console.warn('Firebase Firestore password reset sync warning:', fsErr.message);
+    }
+
+    res.json({
+      success: true,
+      message: 'Password reset successfully! You can now log in with your new password.'
+    });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to reset password.' });
+    console.error('Password reset error:', err);
+    res.status(500).json({ error: 'Failed to reset password. Please try again.' });
   }
-});
+};
+
+router.post('/forgot-password', handleResetPassword);
+router.post('/reset-password', handleResetPassword);
 
 module.exports = router;

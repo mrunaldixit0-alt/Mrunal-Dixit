@@ -60,6 +60,7 @@ function setDocument(collection, docId, data) {
 
       const req = https.request(url, {
         method: 'PATCH',
+        timeout: 4000,
         headers: {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(postData)
@@ -75,6 +76,11 @@ function setDocument(collection, docId, data) {
             resolve({ success: false, status: res.statusCode, error: responseText });
           }
         });
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        resolve({ success: false, error: 'Timeout' });
       });
 
       req.on('error', (err) => {
@@ -114,8 +120,99 @@ function deleteDocument(collection, docId) {
   });
 }
 
+/**
+ * Convert Firestore document Value fields format into a plain JavaScript object
+ */
+function fromFirestoreFields(fields) {
+  if (!fields || typeof fields !== 'object') return {};
+  const obj = {};
+  for (const [key, val] of Object.entries(fields)) {
+    if (val.stringValue !== undefined) {
+      obj[key] = val.stringValue;
+    } else if (val.integerValue !== undefined) {
+      obj[key] = parseInt(val.integerValue, 10);
+    } else if (val.doubleValue !== undefined) {
+      obj[key] = parseFloat(val.doubleValue);
+    } else if (val.booleanValue !== undefined) {
+      obj[key] = val.booleanValue;
+    } else if (val.nullValue !== undefined) {
+      obj[key] = null;
+    } else if (val.timestampValue !== undefined) {
+      obj[key] = val.timestampValue;
+    } else if (val.arrayValue !== undefined) {
+      obj[key] = (val.arrayValue.values || []).map(item => {
+        if (item.mapValue) return fromFirestoreFields(item.mapValue.fields);
+        if (item.stringValue !== undefined) return item.stringValue;
+        if (item.integerValue !== undefined) return parseInt(item.integerValue, 10);
+        if (item.doubleValue !== undefined) return parseFloat(item.doubleValue);
+        if (item.booleanValue !== undefined) return item.booleanValue;
+        return item;
+      });
+    } else if (val.mapValue !== undefined) {
+      obj[key] = fromFirestoreFields(val.mapValue.fields);
+    }
+  }
+  return obj;
+}
+
+/**
+ * Fetch all documents from a Cloud Firestore collection
+ */
+function getDocuments(collection, maxDocs = 300) {
+  return new Promise((resolve) => {
+    try {
+      const url = new URL(`https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/${collection}?key=${firebaseConfig.apiKey}&pageSize=${maxDocs}`);
+      
+      const req = https.request(url, {
+        method: 'GET',
+        timeout: 5000
+      }, (res) => {
+        let responseText = '';
+        res.on('data', chunk => responseText += chunk);
+        res.on('end', () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            try {
+              const json = JSON.parse(responseText);
+              const docs = (json.documents || []).map(doc => {
+                const data = fromFirestoreFields(doc.fields);
+                const pathParts = doc.name ? doc.name.split('/') : [];
+                const docId = pathParts.length > 0 ? pathParts[pathParts.length - 1] : undefined;
+                return { id: docId, ...data };
+              });
+              resolve({ success: true, documents: docs, count: docs.length });
+            } catch (parseErr) {
+              console.warn(`Firestore getDocuments parse error [${collection}]:`, parseErr.message);
+              resolve({ success: false, error: parseErr.message, documents: [] });
+            }
+          } else {
+            console.warn(`Firestore getDocuments warning [${collection}]: HTTP ${res.statusCode}`, responseText);
+            resolve({ success: false, status: res.statusCode, error: responseText, documents: [] });
+          }
+        });
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        resolve({ success: false, error: 'Timeout', documents: [] });
+      });
+
+      req.on('error', (err) => {
+        console.warn(`Firestore getDocuments error [${collection}]:`, err.message);
+        resolve({ success: false, error: err.message, documents: [] });
+      });
+
+      req.end();
+    } catch (e) {
+      console.warn('Firestore getDocuments exception:', e.message);
+      resolve({ success: false, error: e.message, documents: [] });
+    }
+  });
+}
+
 module.exports = {
   firebaseConfig,
   setDocument,
-  deleteDocument
+  deleteDocument,
+  fromFirestoreFields,
+  getDocuments
 };

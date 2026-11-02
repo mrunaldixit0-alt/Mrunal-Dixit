@@ -1,31 +1,43 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
-import { Clock, CheckCircle2, PackageCheck, AlertCircle, RefreshCw, ShoppingBag } from 'lucide-react';
+import { Clock, CheckCircle2, PackageCheck, AlertCircle, RefreshCw, ShoppingBag, Printer, FileText, X, Utensils } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Orders() {
-  const { isAuthenticated, user } = useAuth();
+  const { user } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [lookupPhone, setLookupPhone] = useState('');
+  const [selectedBillOrder, setSelectedBillOrder] = useState(null);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchMyOrders();
-    } else {
-      setLoading(false);
-    }
-  }, [isAuthenticated]);
+    fetchMyOrders();
+  }, [user]);
 
-  const fetchMyOrders = async () => {
+  const fetchMyOrders = async (phoneFilter = '') => {
     try {
       setLoading(true);
-      const res = await axios.get('/api/orders/my-orders');
+      const phone = phoneFilter || lookupPhone || user?.phone || '';
+      const email = user?.email || '';
+      const params = new URLSearchParams();
+      if (phone) params.append('phone', phone);
+      if (email && !email.includes('guest')) params.append('email', email);
+
+      const url = params.toString() ? `/api/orders/my-orders?${params.toString()}` : '/api/orders/my-orders';
+      const res = await axios.get(url);
       setOrders(res.data || []);
     } catch (err) {
       console.error('Failed to fetch customer orders:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleLookupSubmit = (e) => {
+    e.preventDefault();
+    if (lookupPhone.trim()) {
+      fetchMyOrders(lookupPhone.trim());
     }
   };
 
@@ -45,26 +57,6 @@ export default function Orders() {
         return 'bg-slate-100 text-slate-700 border-slate-200';
     }
   };
-
-  if (!isAuthenticated) {
-    return (
-      <div className="max-w-3xl mx-auto px-4 py-16 text-center space-y-4">
-        <div className="w-16 h-16 bg-amber-500/10 text-amber-600 rounded-full flex items-center justify-center mx-auto font-bold">
-          <Clock className="w-8 h-8" />
-        </div>
-        <h2 className="text-2xl font-bold text-slate-900">Please Log In to View Orders</h2>
-        <p className="text-slate-500 text-sm">
-          Log in with your customer account to view live order updates and history.
-        </p>
-        <Link
-          to="/login"
-          className="inline-block px-6 py-2.5 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs uppercase"
-        >
-          Log In Now
-        </Link>
-      </div>
-    );
-  }
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
@@ -165,13 +157,141 @@ export default function Orders() {
                 </div>
               </div>
 
-              {/* Delivery Address & Notes */}
-              <div className="pt-2 text-xs text-slate-500 flex justify-between border-t border-slate-100">
-                <span>📍 <strong>Delivery to:</strong> {order.delivery_address} ({order.phone})</span>
-                <span>💳 <strong>Payment:</strong> {order.payment_method}</span>
+              {/* Delivery Address & Notes & View Bill Button */}
+              <div className="pt-3 text-xs text-slate-500 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100">
+                <div className="space-y-1">
+                  <div>📍 <strong>Delivery to:</strong> {order.delivery_address} ({order.phone})</div>
+                  <div>💳 <strong>Payment:</strong> {order.payment_method}</div>
+                </div>
+                <button
+                  onClick={() => setSelectedBillOrder(order)}
+                  className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 font-bold text-xs transition-colors shadow-sm"
+                >
+                  <Printer className="w-3.5 h-3.5 text-amber-400" />
+                  <span>View & Print Bill</span>
+                </button>
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Official Customer Bill Modal */}
+      {selectedBillOrder && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-xl border border-slate-200 shadow-2xl space-y-6 relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setSelectedBillOrder(null)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100 transition-colors"
+              title="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Bill Header */}
+            <div className="flex justify-between items-start pb-4 border-b border-slate-200 pr-8">
+              <div>
+                <div className="flex items-center space-x-2">
+                  <Utensils className="w-5 h-5 text-amber-500" />
+                  <span className="font-black text-slate-900 text-sm uppercase tracking-wider">Smart Dine Restaurant</span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-0.5">Official Customer Bill & Order Receipt</p>
+              </div>
+              <div className="text-right">
+                <span className={`px-2.5 py-1 rounded-full text-xs font-extrabold border ${getStatusBadge(selectedBillOrder.status)}`}>
+                  ● {selectedBillOrder.status}
+                </span>
+                <p className="text-[10px] text-slate-400 mt-1 font-mono">
+                  {selectedBillOrder.created_at ? new Date(selectedBillOrder.created_at).toLocaleString() : ''}
+                </p>
+              </div>
+            </div>
+
+            {/* Order Details Metadata */}
+            <div className="grid grid-cols-2 gap-3 text-xs bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
+              <div>
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">Order Number</span>
+                <span className="font-mono font-extrabold text-slate-900">#{selectedBillOrder.order_number}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">Payment Method</span>
+                <span className="font-semibold text-slate-800">{selectedBillOrder.payment_method || 'Cash on Delivery'}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">Customer Name</span>
+                <span className="font-semibold text-slate-800">{selectedBillOrder.customer_name}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">Phone Number</span>
+                <span className="font-semibold text-slate-800">{selectedBillOrder.phone}</span>
+              </div>
+              <div className="col-span-2">
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">Delivery Address</span>
+                <span className="font-semibold text-slate-800">{selectedBillOrder.delivery_address}</span>
+              </div>
+            </div>
+
+            {/* Itemized Food Bill Section (Food Names Prominently Displayed) */}
+            <div className="space-y-3 pt-1">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center space-x-1.5">
+                  <FileText className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Food Items In Your Bill</span>
+                </span>
+                <span className="text-[11px] font-bold text-slate-400">
+                  {(selectedBillOrder.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0)} items
+                </span>
+              </div>
+
+              <div className="divide-y divide-slate-100">
+                {(selectedBillOrder.items || []).map((item, idx) => {
+                  const itemTotal = (item.price || 0) * (item.quantity || 1);
+                  return (
+                    <div key={idx} className="py-2.5 flex items-center justify-between text-xs">
+                      <div className="space-y-0.5">
+                        <p className="font-extrabold text-slate-900 text-sm">
+                          {item.food_name || item.name || 'Food Item'}
+                        </p>
+                        <p className="text-slate-500 text-[11px]">
+                          Quantity: <span className="font-bold text-slate-700">{item.quantity}</span> × ₹{item.price} each
+                        </p>
+                      </div>
+                      <div className="text-right font-black text-slate-900 text-sm">
+                        ₹{itemTotal}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Total Summary */}
+            <div className="pt-3 border-t-2 border-dashed border-slate-200 space-y-2 text-xs">
+              <div className="flex justify-between items-center pt-2">
+                <span className="font-black text-slate-900 text-sm uppercase">Total Amount Paid</span>
+                <span className="font-black text-xl text-amber-600">₹{selectedBillOrder.total_amount}</span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="pt-4 border-t border-slate-100 flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => setSelectedBillOrder(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider flex items-center space-x-1.5 shadow-md"
+              >
+                <Printer className="w-3.5 h-3.5 text-amber-400" />
+                <span>Print Bill</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

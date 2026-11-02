@@ -5,34 +5,62 @@ const seedData = async () => {
   console.log('Seeding initial data for Smart Dine Restaurant System...');
   await initDatabase();
 
-  // 1. Seed / Update Default Admin User with Pass@123
-  const adminPasswordHash = await bcrypt.hash('Pass@123', 10);
-  const existingAdmin = await dbGet('SELECT * FROM users WHERE email = ?', ['admin@smartdine.com']);
+  // 1. Safe, Idempotent Admin User Seeding from Environment Variables
+  const adminEmail = (process.env.ADMIN_EMAIL || 'admin@gmail.com').toLowerCase().trim();
+  const adminPassword = process.env.ADMIN_PASSWORD || 'Pass@123';
+
+  const existingAdmin = await dbGet('SELECT * FROM users WHERE email = ?', [adminEmail]);
   if (!existingAdmin) {
+    const adminPasswordHash = await bcrypt.hash(adminPassword, 10);
     await dbRun(
       `INSERT INTO users (name, email, password_hash, phone, role) VALUES (?, ?, ?, ?, ?)`,
-      ['Admin Manager', 'admin@smartdine.com', adminPasswordHash, '+91 98765 43210', 'admin']
+      ['Admin Manager', adminEmail, adminPasswordHash, '+91 98765 43210', 'admin']
     );
-    console.log('Seeded Default Admin: admin@smartdine.com / Pass@123');
+    console.log(`Seeded Initial Admin: ${adminEmail}`);
   } else {
-    await dbRun(
-      `UPDATE users SET password_hash = ?, role = 'admin' WHERE email = ?`,
-      [adminPasswordHash, 'admin@smartdine.com']
-    );
-    console.log('Updated Default Admin password for admin@smartdine.com to Pass@123');
+    // Ensure role is strictly admin, but NEVER overwrite existing password on startup
+    if (existingAdmin.role !== 'admin') {
+      await dbRun(`UPDATE users SET role = 'admin' WHERE email = ?`, [adminEmail]);
+    }
+    console.log(`Verified existing Admin account: ${adminEmail}`);
   }
 
-  // 2. Seed Default Customer User
+  // Clean up any ephemeral auto-generated guest accounts from previous sessions
+  await dbRun(`DELETE FROM users WHERE email LIKE 'customer_%@smartdine.com'`);
+
+  // 2. Seed / Ensure Default Customer User Accounts
+  const customerDefaultPass = process.env.CUSTOMER_PASSWORD || 'Pass@123';
+  const customerPasswordHash = await bcrypt.hash(customerDefaultPass, 10);
+
+  // Ensure primary customer account mrunal@gmail.com
+  const mrunalCustomer = await dbGet('SELECT * FROM users WHERE email = ?', ['mrunal@gmail.com']);
+  if (!mrunalCustomer) {
+    await dbRun(
+      `INSERT INTO users (name, email, password_hash, phone, role) VALUES (?, ?, ?, ?, ?)`,
+      ['Mrunal Dixit', 'mrunal@gmail.com', customerPasswordHash, '+91 98765 00000', 'customer']
+    );
+    console.log(`Seeded Customer account: mrunal@gmail.com / ${customerDefaultPass}`);
+  } else {
+    // Check if current password hash matches customerDefaultPass, if not sync it
+    const matchesPass = await bcrypt.compare(customerDefaultPass, mrunalCustomer.password_hash);
+    if (!matchesPass) {
+      await dbRun('UPDATE users SET password_hash = ? WHERE id = ?', [customerPasswordHash, mrunalCustomer.id]);
+      console.log(`Synchronized mrunal@gmail.com password to: ${customerDefaultPass}`);
+    } else {
+      console.log('Verified existing Customer account: mrunal@gmail.com');
+    }
+  }
+
+  // Ensure default demo customer account customer@gmail.com
   const existingCustomer = await dbGet('SELECT * FROM users WHERE email = ?', ['customer@gmail.com']);
   let customerId;
   if (!existingCustomer) {
-    const customerPasswordHash = await bcrypt.hash('customer123', 10);
     const result = await dbRun(
       `INSERT INTO users (name, email, password_hash, phone, role) VALUES (?, ?, ?, ?, ?)`,
       ['Rahul Sharma', 'customer@gmail.com', customerPasswordHash, '+91 91234 56789', 'customer']
     );
     customerId = result.id;
-    console.log('Seeded Default Customer: customer@gmail.com / customer123');
+    console.log(`Seeded Default Customer: customer@gmail.com / ${customerDefaultPass}`);
   } else {
     customerId = existingCustomer.id;
   }
@@ -82,9 +110,7 @@ const seedData = async () => {
   }
 
   // 5. Seed Food Items
-  const existingFoods = await dbAll('SELECT COUNT(*) as count FROM foods');
-  if (existingFoods[0].count === 0) {
-    const foodList = [
+  const foodList = [
       // Fasting Foods (Upvas)
       {
         category_slug: 'fasting-food',
@@ -266,7 +292,7 @@ const seedData = async () => {
         ingredients: 'Rice, Urad Dal, Coconut, Sambar Spices',
         price: 120,
         is_available: 1,
-        image_url: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=600&auto=format&fit=crop',
+        image_url: 'https://images.unsplash.com/photo-1626777557339-2e7834573887?w=600&auto=format&fit=crop',
         dietary_info: 'Easy to digest, Low Fat, Jain Suitable',
         tags: 'Jain,Veg,Healthy,Breakfast,South Indian'
       },
@@ -279,9 +305,31 @@ const seedData = async () => {
         ingredients: 'Khoya, Milk, Sugar, Cardamom, Rose Water, Saffron Rabdi',
         price: 160,
         is_available: 1,
-        image_url: 'https://images.unsplash.com/photo-1541781774459-bb2af2f05b55?w=600&auto=format&fit=crop',
+        image_url: 'https://images.unsplash.com/photo-1589302168068-964663d91547?w=600&auto=format&fit=crop',
         dietary_info: 'Royal Sweet Indulgence',
         tags: 'Sweet,Veg,Desserts,Kids Friendly'
+      },
+      {
+        category_slug: 'desserts',
+        name: 'Saffron Rasmalai',
+        description: 'Soft cottage cheese discs soaked in cardamom & saffron infused thickened sweet milk.',
+        ingredients: 'Paneer / Chhena, Condensed Milk, Saffron, Pistachio, Cardamom',
+        price: 170,
+        is_available: 1,
+        image_url: 'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=600&auto=format&fit=crop',
+        dietary_info: 'Traditional Indian Sweet',
+        tags: 'Sweet,Veg,Desserts,Kids Friendly'
+      },
+      {
+        category_slug: 'desserts',
+        name: 'Warm Gajar Ka Halwa',
+        description: 'Traditional Punjabi sweet dessert made with fresh grated carrots, khoya, pure ghee, and dry fruits.',
+        ingredients: 'Fresh Red Carrots, Ghee, Milk, Khoya, Cashews, Raisins, Cardamom',
+        price: 150,
+        is_available: 1,
+        image_url: 'https://images.unsplash.com/photo-1597362925123-77861d3fbac7?w=600&auto=format&fit=crop',
+        dietary_info: 'Rich Winter Special Sweet',
+        tags: 'Sweet,Veg,Desserts'
       },
       {
         category_slug: 'desserts',
@@ -322,24 +370,39 @@ const seedData = async () => {
 
     for (const food of foodList) {
       const categoryId = categoryMap[food.category_slug];
-      await dbRun(
-        `INSERT INTO foods (category_id, name, description, ingredients, price, is_available, image_url, dietary_info, tags)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          categoryId,
-          food.name,
-          food.description,
-          food.ingredients,
-          food.price,
-          food.is_available,
-          food.image_url,
-          food.dietary_info,
-          food.tags
-        ]
-      );
+      const existing = await dbGet('SELECT * FROM foods WHERE name = ?', [food.name]);
+      if (!existing) {
+        await dbRun(
+          `INSERT INTO foods (category_id, name, description, ingredients, price, is_available, image_url, dietary_info, tags)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            categoryId,
+            food.name,
+            food.description,
+            food.ingredients,
+            food.price,
+            food.is_available,
+            food.image_url,
+            food.dietary_info,
+            food.tags
+          ]
+        );
+      } else {
+        // Update image_url and metadata if inaccurate or default
+        await dbRun(
+          `UPDATE foods SET image_url = ?, category_id = ? WHERE id = ?`,
+          [food.image_url, categoryId, existing.id]
+        );
+      }
     }
-    console.log(`Seeded ${foodList.length} initial food items across multiple categories.`);
-  }
+
+    // Fix test dishes with default fallback images
+    const fallbackImage = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&auto=format&fit=crop';
+    await dbRun(`UPDATE foods SET image_url = 'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=600&auto=format&fit=crop' WHERE LOWER(name) LIKE '%paneer%' AND image_url = ?`, [fallbackImage]);
+    await dbRun(`UPDATE foods SET image_url = 'https://images.unsplash.com/photo-1589302168068-964663d91547?w=600&auto=format&fit=crop' WHERE LOWER(name) LIKE '%gulab%' AND image_url = ?`, [fallbackImage]);
+    await dbRun(`UPDATE foods SET image_url = 'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=600&auto=format&fit=crop' WHERE LOWER(name) LIKE '%rasmalai%' AND image_url = ?`, [fallbackImage]);
+
+    console.log(`Seeded and updated initial food items across multiple categories.`);
 
   // 6. Seed Sample Order
   const existingOrders = await dbAll('SELECT COUNT(*) as count FROM orders');
@@ -371,32 +434,63 @@ const seedData = async () => {
     console.log('Seeded sample order for demo customer.');
   }
 
-  // 7. Sync all database tables to Firebase Cloud Firestore
-  console.log('Syncing all database records to Firebase Cloud Firestore...');
-  const { setDocument } = require('./firebase');
-  try {
-    const users = await dbAll('SELECT id, name, email, phone, role, created_at FROM users');
-    const info = await dbGet('SELECT * FROM restaurant_info LIMIT 1');
-    const categories = await dbAll('SELECT * FROM categories');
-    const foods = await dbAll('SELECT * FROM foods');
-    const orders = await dbAll('SELECT * FROM orders');
+  // 7. Seed Sample Table Booking if none exist
+  const existingBookings = await dbAll('SELECT COUNT(*) as count FROM table_bookings');
+  if (existingBookings[0].count === 0 && customerId) {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const dateStr = tomorrow.toISOString().split('T')[0];
 
-    const syncPromises = [
-      ...users.map(u => setDocument('users', u.id, u)),
-      info ? setDocument('restaurant_info', 'info', info) : Promise.resolve(),
-      ...categories.map(cat => setDocument('categories', cat.id, cat)),
-      ...foods.map(food => setDocument('foods', food.id, food)),
-      ...orders.map(async ord => {
-        const items = await dbAll('SELECT * FROM order_items WHERE order_id = ?', [ord.id]);
-        return setDocument('orders', ord.id, { ...ord, items });
-      })
-    ];
-
-    await Promise.all(syncPromises);
-    console.log('Firebase Cloud Firestore synchronization complete!');
-  } catch (fsErr) {
-    console.warn('Firebase Firestore sync encountered a minor warning:', fsErr.message);
+    await dbRun(
+      `INSERT INTO table_bookings (booking_number, user_id, customer_name, customer_email, phone, guests, booking_date, booking_time, special_requests, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        'TB-' + Math.floor(100000 + Math.random() * 900000),
+        customerId,
+        'Rahul Sharma',
+        'customer@gmail.com',
+        '+91 91234 56789',
+        4,
+        dateStr,
+        '08:00 PM',
+        'Prefer window-side seating, celebrating a family dinner',
+        'Confirmed'
+      ]
+    );
+    console.log('Seeded sample table booking for demo customer.');
   }
+
+  // 8. Sync all database tables to Firebase Cloud Firestore (non-blocking background sync)
+  console.log('Syncing database records to Firebase Cloud Firestore in background...');
+  const { setDocument } = require('./firebase');
+  (async () => {
+    try {
+      const users = await dbAll('SELECT id, name, email, phone, role, created_at FROM users');
+      const info = await dbGet('SELECT * FROM restaurant_info LIMIT 1');
+      const categories = await dbAll('SELECT * FROM categories');
+      const foods = await dbAll('SELECT * FROM foods');
+      const orders = await dbAll('SELECT * FROM orders');
+      const bookings = await dbAll('SELECT * FROM table_bookings');
+
+      const syncPromises = [
+        ...users.map(u => setDocument('users', u.id, u)),
+        info ? setDocument('restaurant_info', 'info', info) : Promise.resolve(),
+        ...categories.map(cat => setDocument('categories', cat.id, cat)),
+        ...foods.map(food => setDocument('foods', food.id, food)),
+        ...bookings.map(b => setDocument('table_bookings', b.id, b)),
+        ...orders.map(async ord => {
+          const items = await dbAll('SELECT * FROM order_items WHERE order_id = ?', [ord.id]);
+          return setDocument('orders', ord.id, { ...ord, items });
+        })
+      ];
+
+      await Promise.all(syncPromises);
+      console.log('Firebase Cloud Firestore synchronization complete!');
+    } catch (fsErr) {
+      console.warn('Firebase Firestore sync encountered a minor warning:', fsErr.message);
+    }
+  })();
 
   console.log('Database seeding complete!');
 };

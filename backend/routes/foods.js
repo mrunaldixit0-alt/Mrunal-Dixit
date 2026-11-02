@@ -1,7 +1,56 @@
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const { dbAll, dbGet, dbRun } = require('../db');
 const { verifyToken, isAdmin } = require('../middleware/auth');
+
+// Multer storage setup for dish image uploads
+const uploadsDir = path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
+    cb(null, `dish-${uniqueSuffix}${ext}`);
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+  if (allowedTypes.includes(file.mimetype.toLowerCase())) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only JPG, JPEG, and PNG image files are allowed.'));
+  }
+};
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter
+});
+
+// POST upload food image (Admin only)
+router.post('/upload-image', verifyToken, isAdmin, (req, res) => {
+  upload.single('image')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ error: err.message || 'Image upload failed.' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'Please select an image file (JPG, JPEG, or PNG) to upload.' });
+    }
+    const imageUrl = `/uploads/${req.file.filename}`;
+    res.json({ imageUrl, message: 'Dish image uploaded successfully.' });
+  });
+});
 
 // GET all foods with dynamic filters
 router.get('/', async (req, res) => {

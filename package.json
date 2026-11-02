@@ -5,9 +5,11 @@
   "main": "backend/server.js",
   "scripts": {
     "start": "node backend/server.js",
+    "dev": "node start-dev.js",
+    "dev:all": "node start-dev.js",
     "seed": "node backend/seed.js",
-    "build": "cd backend && npm install",
-    "postinstall": "cd backend && npm install",
+    "build": "cd backend && npm install && npm rebuild sqlite3 --build-from-source",
+    "postinstall": "npm rebuild sqlite3 --build-from-source",
     "dev:backend": "node backend/server.js",
     "dev:frontend": "cd frontend && npm run dev"
   },

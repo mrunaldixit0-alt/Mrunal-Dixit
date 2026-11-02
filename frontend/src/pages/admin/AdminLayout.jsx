@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
+import { useRestaurant } from '../../context/RestaurantContext';
 import {
   LayoutDashboard,
   UtensilsCrossed,
@@ -10,20 +12,54 @@ import {
   Settings as SettingsIcon,
   LogOut,
   ArrowLeft,
-  ShieldCheck
+  ShieldCheck,
+  CalendarCheck,
+  BarChart3
 } from 'lucide-react';
 
 export default function AdminLayout() {
   const { user, logout } = useAuth();
+  const { restaurantInfo } = useRestaurant();
   const location = useLocation();
   const navigate = useNavigate();
 
+  const [badgeCounts, setBadgeCounts] = useState({ pendingBookings: 0, pendingOrders: 0 });
+
+  useEffect(() => {
+    const fetchBadges = async () => {
+      try {
+        const res = await axios.get('/api/users/dashboard-stats');
+        setBadgeCounts({
+          pendingBookings: res.data?.pendingBookings || 0,
+          pendingOrders: res.data?.pendingOrders || 0
+        });
+      } catch (err) {
+        // silent fallback
+      }
+    };
+    fetchBadges();
+    const interval = setInterval(fetchBadges, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
   const navItems = [
     { label: 'Dashboard', path: '/admin', icon: LayoutDashboard },
+    {
+      label: 'Table Booking',
+      path: '/admin/bookings',
+      icon: CalendarCheck,
+      badge: badgeCounts.pendingBookings
+    },
     { label: 'Food Management', path: '/admin/foods', icon: UtensilsCrossed },
     { label: 'Category Management', path: '/admin/categories', icon: Layers },
-    { label: 'Order Management', path: '/admin/orders', icon: ShoppingBag },
+    {
+      label: 'Order Management',
+      path: '/admin/orders',
+      icon: ShoppingBag,
+      badge: badgeCounts.pendingOrders
+    },
     { label: 'Customer Management', path: '/admin/customers', icon: Users },
+    { label: 'Reports', path: '/admin/reports', icon: BarChart3 },
     { label: 'Restaurant Settings', path: '/admin/settings', icon: SettingsIcon }
   ];
 
@@ -46,8 +82,8 @@ export default function AdminLayout() {
               </div>
               <div>
                 <h2 className="font-extrabold text-sm text-white tracking-tight">Admin Portal</h2>
-                <p className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">
-                  Smart Dine Control
+                <p className="text-[10px] text-amber-400 font-bold uppercase tracking-wider truncate max-w-[130px]">
+                  {restaurantInfo?.name || 'Smart Dine'} Control
                 </p>
               </div>
             </div>
@@ -69,7 +105,19 @@ export default function AdminLayout() {
                   }`}
                 >
                   <Icon className="w-4 h-4 shrink-0" />
-                  <span>{item.label}</span>
+                  <span className="flex-1">{item.label}</span>
+                  {item.badge > 0 && (
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                        active
+                          ? 'bg-slate-950 text-amber-400'
+                          : 'bg-amber-500 text-slate-950'
+                      }`}
+                      title={`${item.badge} Pending`}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
                 </Link>
               );
             })}
@@ -88,7 +136,7 @@ export default function AdminLayout() {
           <button
             onClick={() => {
               logout();
-              navigate('/login');
+              navigate('/admin/login');
             }}
             className="flex items-center justify-center space-x-2 w-full py-2.5 rounded-xl bg-rose-500/10 text-rose-400 text-xs font-bold hover:bg-rose-500/20 transition-colors"
           >

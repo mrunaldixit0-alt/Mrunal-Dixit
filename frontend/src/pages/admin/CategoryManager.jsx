@@ -118,6 +118,10 @@ export default function CategoryManager() {
                           src={cat.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100'}
                           alt={cat.name}
                           className="w-10 h-10 rounded-xl object-cover"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100';
+                          }}
                         />
                         <span className="font-bold text-white text-sm">{cat.name}</span>
                       </div>
